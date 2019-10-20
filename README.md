@@ -7,7 +7,8 @@ Feedback is wecome via Twitter @moxiaoranying or moxiaoran2012@gmail.com
 Code and full version can ben found [here](). 
 
 -----------------
-**2019 Week 42 🚘 [Car Fuel Economy](https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-10-15) **
+
+**2019 Week 42 🚘 [Car Fuel Economy](https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-10-15)**
 
 ![](https://github.com/moxiaoran/tidytuesday/blob/master/pic/2019_10_15/greenest_companies.gif?raw=true)
 
