@@ -8,6 +8,8 @@ Code and full version can ben found [here](https://github.com/moxiaoran/tidytues
 
 -----------------
 
+**[2019 Week 43 🎥]() [Horror movie ratings](https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-10-22)**
+
 **[2019 Week 42 🚘](https://github.com/moxiaoran/tidytuesday/tree/master/pic/2019_10_15) [Car Fuel Economy](https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-10-15)**
 
 ![](https://github.com/moxiaoran/tidytuesday/blob/master/pic/2019_10_15/greenest_companies.gif?raw=true)
