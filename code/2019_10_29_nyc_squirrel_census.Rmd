@@ -11,10 +11,116 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(tidyverse)
+library(leaflet)
+library(mapdeck)
+library(skimr)
+library(sf)
+library(broom)
+theme_set(theme_minimal())
 nyc_squirrels <- readr::read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-10-29/nyc_squirrels.csv")
 
+# identify missing data
+skim(nyc_squirrels)
+
+# 
+
+central_park_sf <- read_sf("/Users/yifeiliu/Documents/R/tidytuesday/data/2019_10_29/CentralAndProspectParks/")
 
 ```
+
+
+
+```{r}
+nyc_squirrels %>%
+  ggplot(aes(long, lat)) +
+  geom_point()
+
+by_hectare <- nyc_squirrels %>%
+  mutate(above_groud = !is.na(location) & location == "Above Ground") %>%
+  add_count(hectare) %>%
+  group_by(hectare, n) %>%
+  summarize_at(vars(long, lat, runs_from, indifferent, approaches:runs_from, ends_with("ing"), above_groud),mean) %>%
+  ungroup()
+
+```
+
+
+
+```{r}
+
+by_hectare %>%
+  filter(n >= 10) %>%
+  ggplot(aes(long, lat, size = n, color = pct_gray)) +
+  geom_point() +
+  theme_void()
+
+by_hectare %>%
+  mutate(n_gray = round(pct_gray * n)) %>%
+  glm(cbind(n_gray, n - n_gray) ~ lat, data = ., family = "binomial") %>%
+  summary()
+```
+
+
+Squirrels may be more likely to be gray the the higher north 
+
+
+Does a squirrel run away?
+
+```{r}
+glm(runs_from ~ lat, data = nyc_squirrels, family = "binomial") %>%
+  summary()
+
+ggplot(by_hectare) +
+  geom_sf(data = central_park_sf) +
+  geom_point(aes(long, lat, size = n, color = runs_from)) +
+  scale_color_gradient2(low = "blue", high = "red", mid = "pink", midpoint = 0.3,
+                        labels = scales::percent) +
+  labs(color = "% of squirrels run",
+       size = "# of squirrels",
+       title = "Squirrels in the northwest corner of central Park are more likely to run away") +
+  theme_void() +
+  coord_sf(datum = NA)
+
+```
+
+[central park shapefile](https://www.dropbox.com/s/aqefleiou923wxl/CentralAndProspectParks.zip)
+
+
+```{r}
+
+nyc_squirrels %>%
+  gather(activity, doing, ends_with("ing")) %>%
+  filter(doing) %>%
+  count(activity, sort = T)
+
+```
+
+
+
+
+
+
+
+
+# My Analysis
+
+
+## Data Vis
+
+```{r}
+
+tcu_map <- "https://api.mapbox.com/styles/v1/moxiaoran/ck2jo30pp3jqh1cp38xnycmcy/tiles/256/{z}/{x}/{y}@2x?access_token=pk.eyJ1IjoibW94aWFvcmFuIiwiYSI6ImNqbTZnaHNpdTBrbmMzcG4zMm41MXJrdG4ifQ.W1NeRKi-D3W9EeVB7hh05w"
+
+map_attr <- "© <a href='https://www.mapbox.com/map-feedback/'>Mapbox</a> North Star © <a href='https://www.yifeiliutemple.com'>Yifei Liu</a>"
+
+
+leaflet(nyc_squirrels) %>%
+  addCircles(~ long, ~ lat, color= ~ as.factor(primary_fur_color), stroke = TRUE, fillOpacity = 0.8) %>%
+  addTiles(urlTemplate = tcu_map, attribution = map_attr) %>%
+  addLegend("bottomright", colors= "#ffa500", labels="Dunkin'", title="Primary fur color")
+
+```
+
 
 
 
