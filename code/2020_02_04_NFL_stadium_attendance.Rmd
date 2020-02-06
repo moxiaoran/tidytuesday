@@ -1,0 +1,248 @@
+---
+title: "NFL Stadium Attendance"
+author: "Yifei Liu"
+date: "2/5/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+[#TIDYTUESDAY AND TIDYMODELS](https://juliasilge.com/blog/intro-tidymodels/)
+
+```{r}
+library(tidyverse)
+library(tidytuesdayR)
+library(tidymodels)
+library(tune)
+library(skimr)
+theme_set(theme_minimal())
+
+# NFL data https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-02-04/readme.md
+
+attendance <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-02-04/attendance.csv')
+standings <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-02-04/standings.csv')
+games <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-02-04/games.csv')
+```
+
+
+## Explore data
+
+
+```{r}
+# see how much missing data we have, and general shape of our dataset. 
+
+skim(attendance)
+skim(standings)
+skim(games)
+
+```
+
+
+```{r}
+attendance_joined <- attendance %>%
+  left_join(standings, by = c("year", "team_name", "team"))
+
+attendance_joined
+
+```
+
+
+```{r}
+
+attendance_joined %>%
+  ggplot((aes(fct_reorder(team_name, weekly_attendance, na.rm = T), weekly_attendance,
+              fill = playoffs))) +
+  geom_boxplot(outlier.alpha = .5) +
+  coord_flip()
+
+```
+
+```{r}
+
+attendance_joined %>%
+  distinct(team_name, year, margin_of_victory, playoffs) %>%
+  ggplot(aes(margin_of_victory, fill = playoffs)) +
+  geom_histogram(position = "identity", alpha = 0.7)
+
+```
+
+```{r}
+attendance_joined %>%
+  mutate(week = factor(week)) %>%
+  ggplot(aes(week, weekly_attendance, fill = week)) +
+  geom_boxplot(show.legend = F, outlier.alpha = .2, alpha = .7)
+
+
+```
+
+
+```{r}
+
+attendance_df <- attendance_joined %>%
+  filter(!is.na(weekly_attendance)) %>% # remove the week that team get rest
+  select(team_name, year, weekly_attendance, week, margin_of_victory, strength_of_schedule,
+         playoffs)
+
+
+```
+
+
+
+
+## Traini model
+
+```{r}
+# split the training and testing dataset use rsample package
+set.seed(1234)
+attendance_split <- attendance_df %>%
+  initial_split(strata = playoffs)
+
+nfl_train <- training(attendance_split)
+nfl_test <- testing(attendance_split)
+
+```
+
+build a linear regression and a random forest
+
+```{r}
+# a plain vanilla, no regularization 
+
+# this code say I want train ML use Linear Regression
+lm_spec <- linear_reg() %>%
+  set_engine(engine = "lm")
+
+# specify the x and y, and fit LM model
+lm_fit <- lm_spec %>%
+  fit(weekly_attendance ~.,
+      data = nfl_train)
+
+tidy(lm_fit) %>%
+  arrange(-estimate)
+
+```
+
+
+```{r}
+
+#random Forest model
+rf_spec <- rand_forest(mode = "regression") %>%
+  set_engine("ranger")
+
+rf_fit <- rf_spec %>%
+  fit(weekly_attendance ~.,
+      data = nfl_train)
+
+
+```
+
+
+
+
+## Evaluate model
+
+```{r}
+
+result_train <- lm_fit %>%
+  predict(new_data = nfl_train) %>%
+  mutate(truth = nfl_train$weekly_attendance,
+         model = "lm") %>%
+  bind_rows(rf_fit %>%
+              predict(new_data = nfl_train) %>%
+              mutate(truth = nfl_train$weekly_attendance,
+         model = "rf"))
+
+result_test <- lm_fit %>%
+  predict(new_data = nfl_test) %>%
+  mutate(truth = nfl_test$weekly_attendance,
+         model = "lm") %>%
+  bind_rows(rf_fit %>%
+              predict(new_data = nfl_test) %>%
+              mutate(truth = nfl_test$weekly_attendance,
+         model = "rf"))
+
+```
+
+
+```{r}
+
+result_train %>%
+  group_by(model) %>%
+  rmse(truth = truth, estimate = .pred)
+
+result_test %>%
+  group_by(model) %>%
+  rmse(truth = truth, estimate = .pred)
+
+```
+
+we can see from the result, rf model clearly overfit during training dataset and fail to perform during test set. 
+
+
+
+```{r}
+
+result_test %>%
+  mutate(train = "testing") %>%
+  bind_rows(result_train %>%
+              mutate(train = "training")) %>%
+  ggplot(aes(truth, .pred, color = model)) +
+  geom_abline(lty = 2, color = "gray80", size = 1.5) +
+  geom_point(alpha = 0.4) +
+  facet_wrap(~ train)
+
+```
+
+## Let's try again!
+
+Better choice with cross validation
+
+```{r}
+
+set.seed(1234)
+# cross validation
+nfl_folds <- vfold_cv(nfl_train, strata = playoffs)
+
+rf_result <- fit_resamples(
+  weekly_attendance ~.,
+  rf_spec, 
+  nfl_folds,
+  control = control_resamples(save_pred = TRUE)
+)
+
+rf_result %>%
+  collect_metrics()
+
+```
+
+```{r}
+
+rf_result %>%
+  unnest(.predictions) %>%
+  ggplot(aes(weekly_attendance, .pred, color = id)) +
+  geom_abline(lty = 2, color = "gray80") +
+  geom_point(alpha = 0.4)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
