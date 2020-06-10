@@ -1,0 +1,169 @@
+---
+title: "Beach Volleball"
+author: "Yifei Liu"
+date: "5/19/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+library(scales)
+theme_set(theme_minimal())
+
+tuesdata <- tidytuesdayR::tt_load('2020-05-19')
+
+vb_matches <- tuesdata$vb_matches %>%
+  mutate(match_id = row_number())
+```
+
+
+```{r}
+
+vb_matches %>%
+  count(circuit, tournament, date, sort = T)
+
+vb_matches %>%
+  count(year)
+
+
+```
+
+
+```{r}
+
+vb_long <- vb_matches %>%
+  rename(w_p1_name = w_player1,
+         w_p2_name = w_player2,
+         l_p1_name = l_player1,
+         l_p2_name = l_player2,
+         w_team_rank = w_rank,
+         l_team_rank = l_rank) %>%
+  mutate_at(vars(starts_with("w_"), starts_with("l_")), as.character) %>%
+  pivot_longer(cols = c(starts_with("w_"), starts_with("l_"))) %>% 
+  separate(name, c("winner_loser", "player", "name"), sep = "_",
+           extra = "merge",
+           fill = "right") %>%
+  mutate(winner_loser = str_to_upper(winner_loser))
+
+
+vb_players_matches <- vb_long %>%
+  filter(name != "rank") %>%
+  spread(name, value) %>%
+  type_convert()
+
+
+```
+
+
+```{r}
+
+vb_sets <- vb_matches %>% 
+  select(match_id, circuit:match_num, score) %>%
+  separate_rows(score, sep = ", ") %>%
+  mutate(score = na_if(score, "Forfeit or other"),
+         score = str_remove(score, "retired")) %>%
+  separate(score, "w_score", "l_score", convert = T)
+  
+
+
+
+```
+
+### Look at players
+
+```{r}
+
+by_player <- vb_players_matches %>%
+  group_by(name, gender) %>%
+  summarize(n_matches = n(),
+            pct_winner = mean(winner_loser == "W"),
+            frist_game = min(date),
+            last_game = max(date)) %>%
+  arrange(desc(n_matches)) %>%
+  ungroup()
+  
+by_player %>%
+  filter(n_matches >= 200) %>%
+  ggplot(aes(n_matches, pct_winner, color = gender)) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_continuous(labels = percent) +
+  scale_color_manual(values = c("M" = "blue", "W" = "red")) +
+  labs(x = "# of matches since 2000",
+       y = "% of matches won")
+
+
+vb_players_matches %>%
+  summarize_all(~ mean(!is.na(.))) %>%
+  gather() %>% View()
+
+
+```
+
+
+
+```{r}
+
+vb_players_matches %>%
+  group_by(circuit) %>%
+  summarize(pct_has_attacks = mean(is.na(tot_attacks)),
+            n = n()) %>%
+  arrange(desc(n))
+
+
+
+```
+
+
+### How would we judge a player from their first year?
+
+```{r}
+
+player_first_year <- vb_players_matches %>%
+  group_by(name) %>%
+  filter(year == min(year)) %>% ungroup()
+
+summarize_player <- . %>%
+  summarize(n_matches = n(),
+            pct_winner = mean(winner_loser == "W"),
+            avg_attacks = mean(tot_attacks, na.rm = T),
+            avg_errors = mean(tot_errors, na.rm = TRUE),
+            avg_serve_errors = mean(tot_serve_errors, na.rm = T),
+            avg_kills = mean(tot_kills, na.rm = T),
+            avg_aces = mean(tot_aces, na.rm = T),
+            n_with_data = sum(!is.na(tot_attacks))) %>%
+  ungroup() %>%
+  arrange(desc(n_matches)) %>%
+  filter(!is.na(avg_attacks))
+  
+players_2019 <- vb_players_matches %>%
+  filter(year < 2019) %>%
+  mutate(age  = year - lubridate::year(birthdate)) %>%
+  group_by(name, birthdate, gender, year, birthdate, age) %>%
+  summarize_player()
+
+
+
+```
+
+```{r}
+players_2019 %>%
+  filter(n_with_data >= 10) %>%
+  ggplot(aes(avg_serve_errors, avg_aces, size = n_with_data)) +
+  geom_point() +
+  labs(size = "Game",
+       title = "DON'T TRUST THIS")
+
+```
+
+
+
+
+
+
+
