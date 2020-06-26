@@ -1,0 +1,205 @@
+---
+title: "American Slavery and Juneteenth"
+author: "Yifei Liu"
+date: "6/17/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidytuesdayR)
+library(tidyverse)
+library(ggraph)
+library(ggwordcloud)
+theme_set(theme_minimal())
+
+tuesdata <- tidytuesdayR::tt_load('2020-06-16')
+
+
+```
+
+```{r}
+
+slave_routes <- tuesdata$slave_routes
+
+slave_routes %>%
+  ggplot(aes(n_slaves_arrived)) +
+  geom_histogram()
+
+slave_routes %>%
+  filter(!is.na(ship_name), !is.na(n_slaves_arrived)) %>%
+  filter(fct_lump(ship_name, 12) != "Other") %>%
+  mutate(ship_name = fct_reorder(ship_name, n_slaves_arrived)) %>%
+  ggplot(aes(n_slaves_arrived, ship_name)) +
+  geom_boxplot()
+
+```
+
+```{r}
+
+slave_routes %>%
+  ggplot(aes(year_arrival))+
+  geom_histogram() +
+  geom_vline(xintercept = c(1765, 1865), lty = 2, color = "red") +
+  labs(title = "# of slave ship over time", subtitle = "Dataset is not complete")
+
+slave_routes %>%
+  count(port_arrival, sort = T)
+
+slave_routes %>%
+  mutate(port_origin = str_trunc(port_origin, 30),
+         port_origin = fct_lump(port_origin, 12),
+         port_origin = fct_reorder(port_origin, year_arrival)) %>%
+  count(port_origin, decade = 10 * (year_arrival %/% 10)) %>%
+  ggplot(aes(decade, n, color = port_origin)) +
+  geom_line(show.legend = F) +
+  facet_wrap(~ port_origin) +
+  geom_vline(xintercept = c(1807), lty = 2) +
+  theme(strip.text = element_text(size = 6))
+
+slave_routes %>%
+  filter(port_origin == "New York") %>%
+  arrange(desc(year_arrival))
+
+```
+
+Do slavery ship change origin?
+
+```{r}
+
+slave_routes %>%
+  filter(fct_lump(ship_name, 12) != "Other") %>%
+  count(ship_name, port_origin, port_arrival,sort = T) %>%
+  group_by(ship_name) %>%
+  mutate(percent = n / sum(n)) %>%
+  top_n(1, percent) %>%
+  arrange(desc(percent))
+
+```
+
+```{r}
+set.seed(2020)
+
+slave_routes %>%
+  count(port_arrival, port_origin, sort = T) %>%
+  mutate(port_origin = str_remove(port_origin, "\\,.*$"),
+         port_arrival = str_remove(port_arrival, "\\,.*$")) %>%
+  filter(port_origin != port_arrival) %>%
+  head(40) %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(width = n), arrow = arrow(type = "closed", length = unit(.1, "inch"))) +
+  geom_node_point() +
+  scale_edge_size_continuous(range = c(.5, 4)) +
+  geom_node_text(aes(label = name), repel = T) +
+  labs(title = "Common slave route",
+       edge_width = "# of ships") +
+  theme_void()
+
+
+```
+
+
+```{r}
+
+slave_routes %>%
+  group_by(port_origin) %>%
+  summarize(total_reoreded = sum(n_slaves_arrived, na.rm = T),
+            pct_missing = mean(is.na(n_slaves_arrived)),
+            estimated_total = mean(n_slaves_arrived, na.rm = T) * n(),
+            n_ships = n()) %>%
+  arrange(desc(n_ships))
+
+```
+
+
+```{r}
+
+census <- tuesdata$census
+
+census %>%
+  mutate(unaccounted = total - white - black) %>%
+  arrange(year) %>% 
+  gather(racial_category, population, white, black_free, black_slaves) %>%
+  filter(region == "USA Total") %>%
+  ggplot(aes(year, population, fill = racial_category)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = "Year",
+       y = "Census Population",
+       fill = "Racial category",
+       subtitle = "Census racial makeup of US, 1790-1870") +
+  theme(legend.position = "bottom")
+
+
+```
+
+```{r}
+
+name_counts <- tuesdata$african_names %>%
+  count(name, gender, sort = T)
+
+name_counts %>%
+  head(100) %>%
+  ggplot(aes(label = name, size = n, color = gender)) +
+  geom_text_wordcloud()
+
+```
+
+
+```{r}
+library(tidytext)
+
+
+tuesdata$african_names %>%
+  filter(!is.na(gender)) %>%
+  mutate(gender = fct_recode(gender, Man = "Boy", Woman = "Girl")) %>%
+  count(name, gender, sort = T) %>%
+  group_by(gender) %>%
+  top_n(20, n) %>%
+  ungroup() %>%
+  mutate(name = reorder_within(name, n, gender)) %>%
+  ggplot(aes(n, name)) +
+  geom_col() +
+  scale_y_reordered() +
+  facet_wrap(~gender, scales = "free")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

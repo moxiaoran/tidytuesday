@@ -1,0 +1,169 @@
+---
+title: "Analyzing African-American Achievements"
+author: "Yifei Liu"
+date: "6/10/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+library(plotly)
+library(WikipediR)
+theme_set(theme_minimal())
+
+tuesdata <- tidytuesdayR::tt_load('2020-06-09')
+```
+
+
+```{r}
+
+tuesdata$firsts %>% View()
+
+tuesdata$science %>% View()
+
+```
+
+
+## African American Systemic racism in snapshot: 
+
+African Americna experience Systemic racism general direction timeline, 
+
+- before civil war 1856, *slavery*. 
+- After civil war, *convict leasing* begining 1846 end July 1, 1928. 
+- After than *Jim Crow* begainning at the end of Reconstruction in 1877 and the beginning of the civil rights movement in the 1950s. 
+- After jim crow fade away, *massive incracation* start 1970.
+
+
+## EDA
+
+### See general trend
+
+```{r}
+firsts <- tuesdata$firsts %>%
+   mutate(person = str_remove(person, "[\\[\\(].*"),
+         person = str_trim(person))
+
+ firsts %>%
+  ggplot(aes(year)) +
+  geom_histogram()
+ 
+ firsts %>%
+   count(category, year, sort = T) %>%
+   ggplot(aes(year, n)) +
+   geom_point() +
+   facet_wrap(~ category)
+ 
+ 
+ firsts %>%
+   count(category, sort = T) %>%
+   mutate(category = fct_reorder(category, n)) %>%
+   ggplot(aes(n, category)) +
+   geom_col()
+
+```
+
+
+\
+
+
+```{r}
+g <- firsts%>%
+  ggplot(aes(year, category, color = category,
+             text = glue::glue("{ year }: { accomplishment }\n{ person }"))) +
+  geom_point() +
+  labs(y = "") +
+  theme(axis.text.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none") +
+  labs(y = "Category", x = "year")
+
+ggplotly(g, tooltip = "text") %>%
+  layout(title = list(text = paste0('Timeline of some notable African American achievements',
+                                    '<br>',
+                                    '<sup>',
+                                    'Source; https://en.wikipedia.org/wiki/List_of_African-American_inventors_and_scientists',
+                                    '</sup>')),
+         hovermode = "x")
+
+```
+
+
+
+### Science
+
+```{r}
+
+science <- tuesdata$science
+
+science %>%
+  separate_rows(occupation_s, sep =  "; ") %>%
+  mutate(occupation = str_to_title(occupation_s)) %>%
+  count(occupation, sort = T)
+
+science %>%
+  filter(str_detect(occupation_s, regex("statis", ignore_case = T))) %>%
+  pull(occupation_s)
+
+science %>%
+  filter(str_detect(occupation_s, "statistician")) 
+
+```
+
+
+```{r}
+library(rvest)
+
+science_html <- science %>%
+  mutate(html = map(links, possibly(read_html, NULL, quiet = FALSE)))
+
+```
+
+
+```{r}
+
+extract_infobox <- . %>%
+  html_node(".vcard") %>%
+  html_table(header = FALSE) %>%
+  as_tibble()
+
+
+infoboxes <- science_html %>%
+  filter(!map_lgl(html, is.null)) %>%
+  mutate(infobox = map(html, possibly(extract_infobox, NULL))) %>%
+  select(link = links, infobox) %>%
+  unnest(infobox) %>%
+  filter(X1 != "" | X2 != "" | X1 != "Scientific career") %>%
+  rename(key = X1, value = X2)
+
+science_infoboxes <- infoboxes %>%
+  group_by(key) %>%
+  mutate(name = first(key)) %>%
+  filter(n() >= 10) %>%
+  group_by(link) %>%
+  ungroup() %>%
+  distinct(name, key, .keep_all = TRUE) %>%
+  spread(key, value)
+
+```
+
+
+```{r}
+
+science_infoboxes %>%
+  pull(`Known for`)
+```
+
+
+
+
+
+

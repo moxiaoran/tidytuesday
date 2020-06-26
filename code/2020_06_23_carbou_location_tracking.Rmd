@@ -1,0 +1,127 @@
+---
+title: "caribou location tracking"
+author: "Yifei Liu"
+date: "6/26/2020"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+
+library(tidyverse)
+theme_set(theme_minimal())
+
+tuesdata <- tidytuesdayR::tt_load('2020-06-23')
+
+```
+
+```{r}
+individuals <- tuesdata$individuals
+locations = tuesdata$locations
+skimr::skim(individuals)
+
+individuals %>%
+  summarize(across(sex:study_site, list(mean = ~ mean(!is.na(.)))))
+
+individuals %>%
+  filter(deploy_off_type == "dead") %>%
+  count(death_cause, sort = T)
+```
+
+
+```{r}
+library(sf)
+central_sf <- read_sf("/Users/yifeiliu/Documents/R/data/tidytuesday/province/province.shp")
+
+indiv_summary <- individuals %>%
+  filter(deploy_on_latitude > 40) %>%
+  count(study_site, deploy_on_latitude, deploy_on_longitude, sort = T) 
+
+x = indiv_summary %>%
+  st_as_sf(coords = c("deploy_on_longitude", "deploy_on_latitude") ,crs = "4269")
+
+indiv_summary %>%
+  ggplot(aes(deploy_on_longitude, deploy_on_latitude, size = n, color = study_site)) +
+  borders("world", regions = "canada") +
+  geom_point() +
+  scale_size_continuous(guide = F) +
+  ggthemes::theme_map()  
+
+```
+
+### looking at locations
+
+```{r}
+
+locations %>%
+  ggplot(aes(longitude, latitude, color = study_site)) +
+  geom_point()
+
+```
+
+```{r}
+
+locations %>%
+  group_by(animal_id, study_site) %>%
+  summarize(start = min(timestamp),
+            end = max(timestamp),
+            num_points = n()) %>%
+  ungroup()
+
+set.seed(2020)
+example_animal <- locations %>%
+  arrange(timestamp) %>%
+  filter(animal_id == sample(unique(animal_id), 1)) 
+
+library(lubridate)
+
+as.Date_origin <- function(x){
+  as.Date(x, origin = '1970-01-01')
+}
+
+example_animal %>%
+  mutate(timestamp = year(timestamp) + month(timestamp)/12.0 + day(timestamp)/ 30.0) %>%
+  ggplot(aes(longitude, latitude, color = timestamp)) +
+  geom_point() +
+  geom_path() +
+  labs(color = "Quarter",
+       title = "One carbous over time") +
+  scale_colour_gradientn(colours=c('red','green','blue'), labels = as.Date_origin)
+
+
+```
+
+
+```{r}
+library(geosphere)
+
+
+locations_with_gaps <- locations %>%
+  group_by(animal_id) %>%
+  mutate(last_longitude = lag(longitude),
+         last_latitude = lag(latitude),
+         hours = as.numeric(difftime(timestamp, lag(timestamp), unit = "hours")),
+         km = distHaversine(cbind(longitude, latitude),
+                                  cbind(last_longitude, last_latitude)) / 1000,
+         speed = km / hours) %>%
+  ungroup()
+
+locations_with_gaps %>%
+  filter(hours <= 8) %>%
+  ggplot() + geom_histogram(aes(speed)) + 
+  scale_x_log10(labels = scales::comma)  +
+  labs(title = "On average, how fast do caribou travel")
+
+```
+
+[Calculate distance longitude latitude of multiple in dataframe R
+](https://stackoverflow.com/questions/49532911/calculate-distance-longitude-latitude-of-multiple-in-dataframe-r)
+
+
+
